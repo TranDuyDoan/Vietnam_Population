@@ -1,0 +1,733 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# 1. Quy mô dân số 2022
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(naniar)
+library(visdat)
+library(ggplot2)
+library(VIM)
+library(sf)
+library(forcats)
+library(Cairo)
+CairoWin()
+
+
+data <- read.csv("artists1.csv")
+data
+```
+
+```{r}
+library(plotly)
+x = as.character(data$year[c(1,6,11,16,21,22,23)])
+y = data$pop_total[c(1,6,11,16,21,22,23)]
+y = round(y/1000, 2)
+data1 = data.frame(x,y)
+data1
+
+
+
+
+colors <- c(rep("#B7B7B7", length(data1$x) - 1), "#5D0C7B")
+
+
+p <- ggplot(data1, aes(x = x, y = y, fill = colors)) +
+  geom_col(stat = "identity", width = 0.5) +  # Điều chỉnh độ rộng cột = 0.5
+  
+  geom_text(aes(label = y), vjust = -0.5, fontface = "bold") +  # In đậm giá trị trên cột
+  
+  labs(title = "",
+       x = "",
+       y = "Triệu người") +
+  
+  scale_fill_identity() +  # Sử dụng màu fill được chỉ định
+  theme_classic()+
+  
+  theme(       axis.text.x = element_text(face = "bold", size = 10, color = "black"),
+               axis.text.y = element_text(face = "bold", size = 10, color = "black"),
+               axis.title.y = element_text(face = "bold"))
+
+
+print(p)
+
+ggsave(p, filename = 'nhtemp_with_cairo1.png', dpi = 300, type = 'cairo',
+       width = 8, height = 4, units = 'in')
+
+```
+
+# 2. Quy mô theo vùng miền
+
+```{r}
+dataV = read.csv("abc.csv")
+dataV
+```
+
+```{r}
+x1 = dataV$Name[c(2:7)]
+y1 = round((dataV$Danso[c(2:7)]/dataV$Danso[1]),2)
+dataok = data.frame(x1,y1)
+df = dataok %>% 
+  mutate(labels = scales::percent(y1))
+
+
+df
+
+```
+
+```{r}
+
+n_colors <- 6  # Số màu trong dãy
+color_palette <- colorRampPalette(c("#1B4F93", "#BFCAE6"))(n_colors)
+
+p1 = ggplot(df, aes(x = "", y = y1, fill = x1)) +
+  geom_col(color = "white") +
+  
+  geom_label(aes(label = labels), color = c("white", "white", "white","white",1,1),
+            position = position_stack(vjust = 0.5),
+            show.legend = FALSE) +
+  
+  
+  scale_fill_manual(values = color_palette, 
+                  name = "",
+                  labels = c("Trung du và miền núi phía Bắc","Đồng bằng sông Hồng", "Bắc Trung Bộ và Duyên hải miền Trung", "Tây Nguyên", "Đông Nam Bộ", "Đồng bằng sông Cửu Long")) +
+  
+  coord_polar(theta = "y") + 
+  theme_void()
+   
+
+   print(p1)
+
+ggsave(p1, filename = 'nhtemp_with_cairovung.png', dpi = 300, type = 'cairo',
+       width = 8, height = 4, units = 'in')
+```
+
+## Bản đồ mật độ dân số
+
+```{r}
+datamap <- read.csv("datalan1.csv")
+vietnam = read_sf("diaphantinhenglish.geojson")
+vietnam
+vietnam = vietnam %>% 
+  full_join(datamap)
+pohe = ggplot(vietnam) +
+  geom_sf(aes(fill = Matdo), size = 0) +
+  theme_void() +
+  labs (
+    title = "",
+    caption = "Nguồn: Tổng cục Thống kê",
+    fill = ""
+  ) +
+  scale_fill_continuous(
+    breaks = c(1000, 2500, 4000),
+    #labels = c('25M', '50M','75M'),
+    guide = guide_colorbar(
+      barheight = unit(20, units = "mm"),
+      barwidth = unit(2, units = "mm"),
+      title.position = "top",
+      title.hjust = 0.5,
+      label.hjust = 0.5
+    ),
+   low = "#BFCAE6",  # Màu tại giá trị thấp (nhạt)
+    high = "#5D0C7B"   # Màu tại giá trị cao (đậm)
+
+  ) +
+  theme (
+    plot.background = element_rect(fill = "azure", color = "azure"),
+    panel.background = element_rect(fill = "azure", color = "azure"),
+    legend.background = element_rect(fill = "azure", color = "azure"),
+    legend.position = c(0.85,0.73),
+    plot.title = element_text(face = "bold")
+  ) +
+  
+  annotate(
+    label = "Hoang Sa\n(Da Nang)",
+    "text",
+    x = 112,
+    y = 18, 
+    size = 2,
+    fontface = "italic"
+  ) +
+   annotate(
+    label = "Truong Sa\n(Khanh Hoa)",
+    "text",
+    x = 115.5,
+    y = 12.5, 
+    size = 2,
+    fontface = "italic"
+  )
+print(pohe)
+
+ggsave(pohe, filename = 'nhtemp_with_cairomap.png', dpi = 300, type = 'cairo',
+       width = 8, height = 4, units = 'in')
+```
+
+# 3. Quy mô, cơ cấu dân số theo độ tuổi
+
+## 3.1. Cơ cấu
+
+```{r}
+library(lessR)
+
+# Sample data of the package
+rtuoi = round(c(data$rate14[23],data$rate64[23],data$rate65[23])/100,4)
+gtuoi = c("0-14","15-64","65 trở lên")
+
+dtok = data.frame(rtuoi, gtuoi)
+dftuoi = dtok %>% 
+  mutate(pertuoi = scales::percent(rtuoi, accuracy = 0.01))
+
+
+dftuoi
+
+
+# vẽ biểu đồ trong theo nhóm tuổi
+
+hsize <- 1.25
+dftuoi <- dftuoi %>% 
+  mutate(x = hsize)
+color_palette1 <- c("#D7D7D7","#5D0C7B","#D59B00")
+
+
+
+pikachu = ggplot(dftuoi, aes(x = hsize, y = rtuoi, fill = gtuoi)) +
+  geom_col(color = "black") +
+  geom_label(aes(label = pertuoi), color = c("black", "white", "black"),
+             position = position_stack(vjust = 0.5),
+             show.legend = FALSE) +
+  
+  
+  coord_polar(theta = "y") +
+  scale_fill_manual(values = color_palette1) +
+  xlim(c(0.2, hsize + 0.5)) + 
+  guides(fill = guide_legend(title = "Nhóm tuổi"))+
+  
+  
+  theme(
+        panel.background = element_rect(fill = "white"),
+        legend.background = element_rect(fill = "white"),
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        legend.text = element_text(face = "bold"))
+
+print(pikachu)
+
+ggsave(pikachu, filename = 'nhtemp_with_cairo123.png', dpi = 300, type = 'cairo',
+       width = 8, height = 4, units = 'in')
+```
+
+```{r}
+ntuoi = data[, c(1,26)]
+ntuoi
+
+
+ pika = ggplot(ntuoi, aes(x = year, y = rate64)) +
+  geom_line(color = "#5D0C7B", size = 2) +
+   
+   
+  geom_point(data = subset(ntuoi, year == 2007),color = "#D59B00", size = 5, shape = 15) +
+   
+  geom_text(
+     data = subset(ntuoi, year == 2007),  # đánh dấu duy nhất năm 2007
+     aes(label = sprintf("%.2f", rate64)),
+     nudge_x = 1.5,
+     nudge_y = 0.01,
+     check_overlap = TRUE,
+     size = 5
+   ) +
+   
+   
+   labs(title = "",
+       x = "",
+       y = "%") +
+   
+   
+  # kẻ đường nét đứt đối chiếu xuống trục hoành
+  geom_segment(
+    data = subset(ntuoi, year == 2007),
+    aes(x = year, y = 62, xend = year, yend = rate64),
+    linetype = "dashed",
+    color = "#5D0C7B"
+  ) +
+   
+  theme_classic()+
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 10),  # làm đậm giá trị trên trục hoành
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  # làm đậm giá trị trên trục tung
+    axis.title = element_text(face = "bold", size = 15)    # làm đậm tiêu đề trục
+  )
+
+pika
+ggsave(pika, filename = 'nhtemp_with_cairo1234.png', dpi = 300, type = 'cairo',
+       width = 8, height = 5, units = 'in')
+```
+
+## 3.2. Biểu đồ kết hợp cột đường: quy mô + tỉ lệ tăng trưởng của từng nhóm tuổi
+
+```{r}
+quymo = data[c(2,5,8,11,14,17,20,23), c(1, 22, 25, 28)]
+qmtuoi <- gather(quymo, key = "nhomtuoi", value = "danso", -year)
+color_palette2 <- c("#D59B00","#322275","#D7D7D7")
+qmtuoi
+
+
+
+# ve bieu do cot
+ptuoi <- ggplot() +
+  geom_bar(data = qmtuoi, aes(x = year, y = danso/1000000, fill = fct_rev(factor(nhomtuoi))), stat = "identity", width = 1.3) +
+  labs(title = "",
+       x = "",
+       y = "triệu người",
+       fill = "") +
+  scale_fill_manual(name = "", values = color_palette2, guide = "none") +
+  theme_classic()
+
+
+# Vẽ biểu đồ đường + 1 trục tung bên phải
+ptuoi = ptuoi +
+  geom_line(data = data, aes(x = year, y = g_rate14 * 1000 + 110, color = "0-14"), size = 1, stat = "identity") +
+  geom_line(data = data, aes(x = year, y = g_rate64 * 1000 + 110, color = "15-64"), size = 1, stat = "identity") +
+  geom_line(data = data, aes(x = year, y = g_rate65 * 1000 + 110, color = "65 trở lên"), size = 1, stat = "identity") +
+  scale_color_manual(name = "", values = color_palette1) +
+  theme_classic() +
+  
+  theme(axis.title.y.left = element_text(color = "black"),
+        axis.text.y.left = element_text(color = "black"),
+        axis.title.y.right = element_text(color = "black"),
+        axis.text.y.right = element_text(color = "black")) +
+  
+  
+  
+  scale_y_continuous(sec.axis = sec_axis(~./10 - 11, name = "%")) +
+  
+  
+  
+  
+  
+   theme(      axis.text.x = element_text(color = "black", face = "bold", size = 10),
+               axis.text.y = element_text(face = "bold", size = 10),
+               axis.title.x = element_text(face = "bold"),
+               axis.title.y = element_text(face = "bold"),
+               legend.position = "bottom",
+               legend.margin = margin(t = -20),
+               legend.text = element_text(face = "bold"))
+
+
+
+print(ptuoi)
+```
+
+```{r}
+ggsave(ptuoi, filename = 'nhtemp_with_caironhomtuoi.png', dpi = 300, type = 'cairo',
+       width = 8, height = 6, units = 'in')
+```
+
+# 4. Quy mô, cơ cấu & tỉ lệ tăng trưởng theo giới tính
+
+## 4.1. Cơ cấu
+
+```{r}
+# Sample data of the package
+pgioi = c(data$rate_M[23],data$rate_F[23])/100
+ggioi = c("Nam","Nữ")
+
+dtgioi = data.frame(pgioi, ggioi)
+dfgioi = dtgioi %>% 
+  mutate(pergioi = scales::percent(pgioi, accuracy = 0.01))
+dfgioi
+
+
+
+```
+
+```{r}
+hsize <- 1.25
+dfgioi <- dfgioi %>% 
+  mutate(x = hsize)
+# color_palette3 <- colorRampPalette(c("lightblue", "darkblue"))(2)
+ color_palette3 <- c("#D7D7D7", "#5D0C7B")
+gioitinh = ggplot(dfgioi, aes(x = hsize, y = pgioi, fill = ggioi)) +
+  geom_col(color = "black" ) +
+  geom_label(aes(label = pergioi), color = c("black", "white"),
+             position = position_stack(vjust = 0.5),
+            show.legend = FALSE) +
+  coord_polar(theta = "y") +
+  scale_fill_manual(values = color_palette3) +
+  xlim(c(0.2, hsize + 0.5)) + 
+  guides(fill = guide_legend(title = "")) +
+  
+  
+  theme(panel.background = element_rect(fill = "white"),
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+         legend.text = element_text(face = "bold"))
+print(gioitinh)
+```
+
+```{r}
+ggsave(gioitinh, filename = 'nhtemp_with_cairogioitinh.png', dpi = 300, type = 'cairo',
+       width = 8, height = 4, units = 'in')
+```
+
+## 4.2. Biểu đồ kết hợp cột đường
+
+```{r}
+cocau = data[c(2,5,8,11,14,17,20,23), c(1, 4, 5)]
+cocau
+qmgioi <- gather(cocau, key = "gioitinh", value = "danso", -year)
+color_palette4 <- c("#5D0C7B", "#D7D7D7")
+
+
+
+
+#biểu đồ cột chồng
+pgioi <- ggplot() +
+  geom_bar(data = qmgioi, aes(x = year, y = danso/1000, 
+                              fill = fct_rev(factor(gioitinh))), 
+                              position = "dodge",  # Set position to "dodge"
+                              stat = "identity", width = 1.8) +
+  labs(title = "",
+       x = "",
+       y = "Triệu người",
+       fill = "giới tính") +
+  scale_fill_manual(name = "giới tính", values = color_palette4, guide = "none") +
+  theme_classic()
+
+# Adding line plots with a secondary y-axis
+pgioi = pgioi +
+  geom_line(data = data, aes(x = year, y = g_rate_M * 60, color = "Nam"), size = 1, stat = "identity") +
+  geom_line(data = data, aes(x = year, y = g_rate_F * 60, color = "Nữ"), size = 1, stat = "identity") +
+  scale_color_manual(name = "", values = color_palette4) +
+  theme_classic() +
+  theme(
+        axis.text.x = element_text(color = "black"),
+        axis.title.y.left = element_text(color = "black"),
+        axis.text.y.left = element_text(color = "black"),
+        axis.title.y.right = element_text(color = "black"),
+        axis.text.y.right = element_text(color = "black")) +
+  scale_y_continuous(sec.axis = sec_axis(~./60, name = "%")) +
+   theme(axis.text.x = element_text(face = "bold", size = 10),
+               axis.text.y = element_text(face = "bold", size = 10),
+               axis.title.x = element_text(face = "bold"),
+               axis.title.y = element_text(face = "bold"),
+               # axis.line.x = element_line(color = "black", size = 1),
+         
+             legend.position = "bottom",
+              legend.margin = margin(t = -20),
+             legend.text = element_text(face = "bold"))
+
+print(pgioi)
+ggsave(pgioi, filename = 'nhtemp_with_cairogioitinh1.png', dpi = 300, type = 'cairo',
+       width = 8, height = 6, units = 'in')
+```
+
+## Tỉ số giới tính bé trai/bé gái
+
+```{r}
+tsgioi = data[, c(1,33)]
+tsgioi
+ptsgioi = ggplot(tsgioi, aes(x = year, y = rate_gt)) +
+  geom_line(color = "#5D0C7B", size = 2, stat = "identity") +
+  
+  
+  
+ # geom_point(data = tsgioi, aes(x = year, y = rate_gt), color = "#5D0C7B", size = 3, shape = 15) +
+
+   geom_point(data = subset(tsgioi, year == 2006),color = "#D59B00", size = 5, shape = 15) +
+  
+  # geom_text(data = sinh, aes(x = year, y = tisuatsinh, label = tisuatsinh),
+  #             vjust = 0.4, hjust = -0.3, fontface = "bold", color = "#5D0C7B", size = 3.5) +
+  # geom_text(data = tsgioi, aes(x = year, y = rate_gt, label = rate_gt),
+  #         nudge_x = 1.2,
+  #         nudge_y = -0.1,
+  #         check_overlap = TRUE,
+  #         size = 3.5, 
+  #         fontface = "bold", color = "#5D0C7B") +
+  # data = subset(ntuoi, year == 2007),color = "#D59B00", size = 5, shape = 15)
+  
+  geom_text( 
+ data = subset(tsgioi, year == 2006),  # Subset the data for year 2007
+    # aes(label = as.character(rate64)),
+     aes(label = sprintf("%.2f", rate_gt)),
+      color = "#5D0C7B",
+     nudge_x = -1.6,
+    nudge_y = 0.01,
+    check_overlap = TRUE,
+    size = 5
+  ) +
+   geom_segment(
+    data = subset(tsgioi, year == 2006),
+    aes(x = year, y = 103, xend = year, yend = rate_gt),
+    linetype = "dashed",
+    color = "#5D0C7B"
+  ) +
+  labs(title = "",
+       x = "",
+       y = "") +
+   
+  theme_classic() + 
+
+   theme(      
+         axis.text.x = element_text(color = "black", face = "bold", size = 10),
+         axis.text.y = element_text(color = "black", face = "bold", size = 10),
+         axis.title.y = element_text(face = "bold")) 
+
+print(ptsgioi)
+ggsave(ptsgioi, filename = 'nhtemp_with_cairotsgioi.png', dpi = 300, type = 'cairo',
+       width = 8.5, height = 5.5, units = 'in')
+```
+
+# 5. Quy mô, cơ cấu theo thành thị & nông thôn
+
+```{r}
+kvuc = data[, c(1, 12, 13)]
+cckvuc <- gather(kvuc, key = "khuvuc", value = "percentage", -year)
+#vẽ biểu đồ miền
+
+
+pmien = 
+    ggplot(cckvuc, aes(x = year, y = percentage, fill = khuvuc)) +
+    geom_area(position = "fill", colour = NA, size = .2, alpha = 1) +
+  # scale_fill_brewer(palette = "grays") +
+   scale_fill_manual(values = c("#D7D7D7", "#5D0C7B"),  
+                     breaks = c("rate_nthon", "rate_tthi"),    
+                     labels = c("Nông thôn", "Thành thị")) + 
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "",
+    x= "",
+    y= "",
+    fill = ""
+    ) +
+  
+   theme_classic() + 
+   theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 10),   # làm đậm giá trị trên trục hoành
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),   # làm đậm giá trị trên trục tung
+    legend.text = element_text(face = "bold")
+    ) 
+
+print(pmien)
+
+ggsave(pmien, filename = 'nhtemp_with_cairomien.png', dpi = 300, type = 'cairo',
+       width = 8, height = 4, units = 'in')
+```
+
+```{r}
+ptthi = c(data$rate_tthi[23],data$rate_nthon[23])/100
+gtthi = c("Thành thị","Nông thôn")
+dttthi = data.frame(ptthi, gtthi)
+dftthi = dttthi %>% 
+  mutate(pertthi = scales::percent(ptthi, accuracy = 0.01))
+hsize <- 1.25
+dftthi <- dftthi %>% 
+  mutate(x = hsize)
+color_palette3 <- c("#D7D7D7", "#5D0C7B")
+
+ptthi = ggplot(dftthi, aes(x = hsize, y = ptthi, fill = gtthi)) +
+  geom_col(color = "black") +
+  geom_label(aes(label = pertthi), color = c( "white", "black"),
+             position = position_stack(vjust = 0.5),
+            show.legend = FALSE) +
+  coord_polar(theta = "y") +
+  scale_fill_manual(values = color_palette3) +
+  xlim(c(0.2, hsize + 0.5)) + 
+  guides(fill = guide_legend(title = ""))+
+  theme(panel.background = element_rect(fill = "white"),
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+         legend.text = element_text(face = "bold"))
+
+print(ptthi)
+ggsave(ptthi, filename = 'nhtemp_with_cairotthi.png', dpi = 300, type = 'cairo',
+       width = 8, height = 4, units = 'in')
+```
+
+```{r}
+dothihoa = data[c(2,5,8,11,14,17,20,23), c(1, 10, 12)]
+dothihoa
+dothihoa$pop_tthi = round(dothihoa$pop_tthi/1000,1)
+
+
+#biểu đồ cột tổng dân số thành thị
+pdothihoa = ggplot(dothihoa, aes(x = year, y = pop_tthi)) +
+  geom_col(stat = "identity", fill = "#D7D7D7", width = 1.5) +  # Điều chỉnh độ rộng cột ở đây (ví dụ: 0.5)
+  geom_text(aes(label = pop_tthi), vjust = 2, fontface = "bold", color = "#5D0C7B") +  # In đậm giá trị trên cột
+  labs(title = "",
+       x = "",
+       y = "Triệu người") +
+  theme_classic()+
+
+  
+  
+  
+# biểu đồ đường % thành thị / tổng số dân
+  geom_line(data = dothihoa, aes(x = year, y = rate_tthi), color = "#5D0C7B", size = 1.8, stat = "identity") +
+  geom_point(data = dothihoa, aes(x = year, y = rate_tthi), color = "#5D0C7B", size = 3, shape = 15) + 
+  geom_text(data = dothihoa, aes(x = year, y = rate_tthi, label = sprintf("%.1f%%", rate_tthi)), 
+             vjust = -0.5, hjust = 1, fontface = "bold", color = "#5D0C7B", size = 4) +  # gán nhãn cho điểm
+  theme_classic() +
+  theme( 
+        axis.text.x = element_text(color = "black"),
+        axis.title.y.left = element_text(color = "black"),
+        axis.text.y.left = element_text(color = "black"),
+        axis.title.y.right = element_text(color = "black"),
+        axis.text.y.right = element_text(color = "black")) +
+  
+  
+   scale_y_continuous(sec.axis = sec_axis(~./1, name = "%")) +
+  
+  
+  
+   theme(      axis.text.x = element_text(face = "bold", size = 10),
+               axis.text.y = element_text(face = "bold", size = 10),
+               axis.title.x = element_text(face = "bold"),
+               axis.title.y = element_text(face = "bold"))
+               # axis.line.x = element_line(color = "black", size = 1),
+
+               # legend.position = "bottom",
+               # legend.margin = margin(t = -0.5, unit = "cm"),  # Đặt khoảng cách từ biểu đồ đến chú thích
+               # legend.text = element_text(face = "bold"))
+print(pdothihoa)
+
+ggsave(pdothihoa, filename = 'nhtemp_with_cairodothihoa.png', dpi = 300, type = 'cairo',
+       width = 8, height = 5, units = 'in')
+
+```
+
+# Tuổi thọ trung bình
+
+```{r}
+tuoitho = data[c(1,4,7,10,13,16,19,23), c(1,19)]
+tuoitho
+
+
+
+ptuoitho = ggplot(tuoitho, aes(x = year, y = avg_tuoitho)) +
+  
+  geom_line(color = "#5D0C7B", size = 2, stat = "identity") +
+  
+  
+  geom_point(data = tuoitho, aes(x = year, y = avg_tuoitho), color = "#5D0C7B", size = 3, shape = 15) +
+  
+  
+  geom_text(data = tuoitho, aes(x = year, y = avg_tuoitho, label = avg_tuoitho), 
+              vjust = -0.65, hjust = 0.9, fontface = "bold", color = "#5D0C7B", size = 3.5) +  
+  labs(title = "",
+       x = "",
+       y = "Tuổi") +
+   
+  theme_classic() + 
+
+   theme(      
+         axis.text.x = element_text(color = "black", face = "bold", size = 10),
+         axis.text.y = element_text(color = "black", face = "bold", size = 10),
+         axis.title.y = element_text(face = "bold")) 
+
+print(ptuoitho)
+ggsave(ptuoitho, filename = 'nhtemp_with_cairotuoitho.png', dpi = 300, type = 'cairo', width = 8, height = 5, units = 'in')
+
+```
+
+# Tỉ lệ gia tăng dân số
+
+```{r}
+tangdan = data[c(1,4,7,10,13,16,19,23), c(1,3)]
+tangdan
+ptangdan = ggplot(tangdan, aes(x = year, y = growth_rate)) +
+  geom_line(color = "#5D0C7B", size = 2, stat = "identity") +
+  geom_point(data = tangdan, aes(x = year, y = growth_rate), color = "#5D0C7B", size = 3, shape = 15) +
+  geom_text(data = tangdan, aes(x = year, y = growth_rate, label = growth_rate), 
+            vjust = 0.4, hjust = -0.3, fontface = "bold", color = "#5D0C7B", size = 3.5) +  
+  labs(title = "",
+       x = "",
+       y = "%") +
+   
+  theme_classic() + 
+
+   theme(      
+         axis.text.x = element_text(color = "black", face = "bold", size = 10),
+         axis.text.y = element_text(color = "black", face = "bold", size = 10),
+         axis.title.y = element_text(face = "bold")) 
+
+print(ptangdan)
+ggsave(ptangdan, filename = 'nhtemp_with_cairotangdan.png', dpi = 300, type = 'cairo',
+       width = 8.5, height = 5.5, units = 'in')
+```
+
+# Tỉ suất sinh thay thế
+
+```{r}
+
+sinh = data[c(1,4,7,10,13,16,19,23), c(1,32)]
+sinh
+psinh = ggplot(sinh, aes(x = year, y = tisuatsinh)) +
+  geom_line(color = "#5D0C7B", size = 2, stat = "identity") +
+  geom_point(data = sinh, aes(x = year, y = tisuatsinh), color = "#5D0C7B", size = 3, shape = 15) +
+  # geom_text(data = sinh, aes(x = year, y = tisuatsinh, label = tisuatsinh),
+  #             vjust = 0.4, hjust = -0.3, fontface = "bold", color = "#5D0C7B", size = 3.5) +
+  geom_text(data = sinh, aes(x = year, y = tisuatsinh, label = tisuatsinh),
+          nudge_x = 0.35,
+    nudge_y = 0.02,
+    check_overlap = TRUE,
+    size = 3.5, 
+    fontface = "bold", color = "#5D0C7B") +
+  
+  labs(title = "",
+       x = "",
+       y = "người") +
+   
+  theme_classic() + 
+
+   theme(      
+         axis.text.x = element_text(color = "black", face = "bold", size = 10),
+         axis.text.y = element_text(color = "black", face = "bold", size = 10),
+         axis.title.y = element_text(face = "bold")) 
+
+print(psinh)
+ggsave(psinh, filename = 'nhtemp_with_cairosinh.png', dpi = 300, type = 'cairo',
+       width = 8.5, height = 5.5, units = 'in')
+```
+
+# Tỉ lệ trẻ em dưới 1 tuổi tử vong
+
+```{r}
+tre = data[c(1,4,7,10,13,16,19,23), c(1,31)]
+tre
+ptre = ggplot(tre, aes(x = year, y = treem)) +
+  geom_line(color = "#5D0C7B", size = 2, stat = "identity") +
+  geom_point(data = tre, aes(x = year, y = treem), color = "#5D0C7B", size = 3, shape = 15) +
+  # geom_text(data = sinh, aes(x = year, y = tisuatsinh, label = tisuatsinh),
+  #             vjust = 0.4, hjust = -0.3, fontface = "bold", color = "#5D0C7B", size = 3.5) +
+  geom_text(data = tre, aes(x = year, y = treem, label = treem),
+          nudge_x = 0.35,
+          nudge_y = 1,
+          check_overlap = TRUE,
+          size = 3.5, 
+          fontface = "bold", color = "#5D0C7B") +
+  
+labs(title = "",
+       x = "",
+       y = "trẻ") +
+   
+  theme_classic() + 
+
+   theme(      
+         axis.text.x = element_text(color = "black", face = "bold", size = 10),
+         axis.text.y = element_text(color = "black", face = "bold", size = 10),
+         axis.title.y = element_text(face = "bold")) 
+
+print(ptre)
+ggsave(ptre, filename = 'nhtemp_with_cairotre.png', dpi = 300, type = 'cairo',
+       width = 8.5, height = 5.5, units = 'in')
+```
